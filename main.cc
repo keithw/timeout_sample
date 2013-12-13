@@ -7,6 +7,7 @@
 #include <iostream>
 
 #include "socket.hh"
+#include "poller.hh"
 
 using namespace std;
 
@@ -35,7 +36,10 @@ int josh( const int argc, const char *argv[] )
   /* Bind socket */
   datagram_socket.bind( Address( "0", local_service, UDP ) );
 
-  /* Start the main loop */
+  /* Set up the events that we care about */
+  Poller poller;
+
+  
 
   return EXIT_SUCCESS;
 }
