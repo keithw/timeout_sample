@@ -75,7 +75,13 @@ int josh( const int argc, const char *argv[] )
        wake up before our next outgoing packet is due */
     const uint64_t timeout = next_packet_is_due - now;
 
-    poller.poll( timeout );
+    /* Wait for an event, and run callback if one comes */
+    auto poll_result = poller.poll( timeout );
+
+    if ( poll_result.result == Poller::Result::Type::Exit ) {
+      /* An action wanted to quit or they all stopped being interested in their events */
+      return poll_result.exit_status;
+    }
   }
 
   return EXIT_SUCCESS;
