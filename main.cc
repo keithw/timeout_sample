@@ -5,6 +5,8 @@
 
 #include <cstdlib>
 #include <iostream>
+#include <memory>
+#include <limits>
 
 #include "socket.hh"
 #include "poller.hh"
@@ -22,24 +24,29 @@ int josh( const int argc, const char *argv[] )
   }
 
   /* Check arguments */
-  if ( argc != 5 ) {
-    throw Exception( argv[ 0 ], "LOCAL_SERVICE DEST_ADDRESS DEST_SERVICE INTERVAL_MS" );
+  if ( (argc != 3) and (argc != 5) ) {
+    throw Exception( argv[ 0 ], "INTERVAL_MS LOCAL_SERVICE [DEST_ADDRESS DEST_SERVICE]" );
   }
 
+  bool automatic_target_mode = (argc == 3 );
+
   /* Get the arguments into our own variables */
-  const string local_service = argv[ 1 ];
-  const string dest_address = argv[ 2 ];
-  const string dest_service = argv[ 3 ];
-  const int interval_ms = myatoi( argv[ 4 ] );
+  const int interval_ms = myatoi( argv[ 1 ] );
+  const string local_service = argv[ 2 ];
+
+  /* We have an optional destination address -- may not learn until we get our first packet */
+  Address destination;
+
+  if ( not automatic_target_mode ) {
+    /* Look up destination hostname */
+    destination = Address( argv[ 3 ], argv[ 4 ], UDP );
+  }
 
   /* Make socket */
   Socket datagram_socket( UDP );
 
   /* Bind socket */
   datagram_socket.bind( Address( "0", local_service, UDP ) );
-
-  /* Look up destination hostname if necessary */
-  const Address destination( dest_address, dest_service, UDP );
 
   /* Set up the events that we care about */
   Poller poller;
@@ -54,26 +61,37 @@ int josh( const int argc, const char *argv[] )
 				       const auto the_packet = datagram_socket.recvfrom();
 				       cout << "Received datagram at time " << timestamp()
 					    << " from " << the_packet.first.str() << endl;
+
+				       /* retarget the server to send packets to the most recent client
+					  who sent it a packet */
+				       if ( automatic_target_mode ) {
+					 destination = the_packet.first;
+				       }
 				       return ResultType::Continue;
 				     } ) );
 
   /* Loop */
   while ( true ) {
-    /* Step 1: Are we due to send an outgoing packet right now? */
-    const uint64_t now = timestamp();
-    uint64_t next_packet_is_due = last_datagram_sent_ms + interval_ms;
+    uint64_t timeout = numeric_limits<int>::max();
 
-    if ( now >= next_packet_is_due ) {
-      /* Send a datagram */
-      datagram_socket.sendto( destination, "Hello from Minna and Josh." );
-      last_datagram_sent_ms = now;
-      next_packet_is_due = last_datagram_sent_ms + interval_ms;
-      cout << "Sent datagram at time " << now << endl;
+    /* Question: Do we have a destination to send to? */
+    if ( not( destination == Address() ) ) {
+      /* Step 1: Are we due to send an outgoing packet right now? */
+      const uint64_t now = timestamp();
+      uint64_t next_packet_is_due = last_datagram_sent_ms + interval_ms;
+
+      if ( now >= next_packet_is_due ) {
+	/* Send a datagram */
+	datagram_socket.sendto( destination, "Hello from Minna and Josh." );
+	last_datagram_sent_ms = now;
+	next_packet_is_due = last_datagram_sent_ms + interval_ms;
+	cout << "Sent datagram at time " << now << " to " << destination.str() << endl;
+      }
+
+      /* Wait for an incoming packet, but make sure to
+	 wake up before our next outgoing packet is due */
+      timeout = next_packet_is_due - now;
     }
-
-    /* Wait for an incoming packet, but make sure to
-       wake up before our next outgoing packet is due */
-    const uint64_t timeout = next_packet_is_due - now;
 
     /* Wait for an event, and run callback if one comes */
     auto poll_result = poller.poll( timeout );
