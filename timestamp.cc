@@ -5,7 +5,7 @@
 #include "timestamp.hh"
 #include "exception.hh"
 
-uint64_t timestamp( void )
+static uint64_t timestamp_internal( void )
 {
     timespec ts;
     SystemCall( "clock_gettime", clock_gettime( CLOCK_REALTIME, &ts ) );
@@ -14,4 +14,11 @@ uint64_t timestamp( void )
     millis += uint64_t( ts.tv_sec ) * 1000;
 
     return millis;
+}
+
+uint64_t timestamp( void )
+{
+    static uint64_t first_timestamp = timestamp_internal();
+
+    return timestamp_internal() - first_timestamp;
 }
