@@ -38,8 +38,8 @@ int josh( const int argc, const char *argv[] )
   /* Bind socket */
   datagram_socket.bind( Address( "0", local_service, UDP ) );
 
-  /* Connect socket to destination */
-  datagram_socket.connect( Address( dest_address, dest_service, UDP ) );
+  /* Look up destination hostname if necessary */
+  const Address destination( dest_address, dest_service, UDP );
 
   /* Set up the events that we care about */
   Poller poller;
@@ -65,7 +65,7 @@ int josh( const int argc, const char *argv[] )
 
     if ( now >= next_packet_is_due ) {
       /* Send a datagram */
-      datagram_socket.write( "Hello from Minna and Josh." );
+      datagram_socket.sendto( destination, "Hello from Minna and Josh." );
       last_datagram_sent_ms = now;
       next_packet_is_due = last_datagram_sent_ms + interval_ms;
       cout << "Sent datagram at time " << now << endl;
@@ -80,6 +80,7 @@ int josh( const int argc, const char *argv[] )
 
     if ( poll_result.result == Poller::Result::Type::Exit ) {
       /* An action wanted to quit or they all stopped being interested in their events */
+      cout << "Quitting after a file descriptor received an error." << endl;
       return poll_result.exit_status;
     }
   }
